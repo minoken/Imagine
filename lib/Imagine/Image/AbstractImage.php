@@ -81,7 +81,73 @@ abstract class AbstractImage implements ImageInterface
 
         return $thumbnail;
     }
+    
+    public function thumbnailSelf(BoxInterface $size, $mode = ImageInterface::THUMBNAIL_INSET, $filter = ImageInterface::FILTER_UNDEFINED)
+    {
+        $startTime = microtime(true);
+        
+//        \Cake\Log\Log::debug("before=" . memory_get_usage() / (1024 * 1024)."MB");
+        if ($mode !== ImageInterface::THUMBNAIL_INSET &&
+            $mode !== ImageInterface::THUMBNAIL_OUTBOUND) {
+            throw new InvalidArgumentException('Invalid mode specified');
+        }
+        
+        $imageSize = $this->getSize();
+        $ratios = array(
+            $size->getWidth() / $imageSize->getWidth(),
+            $size->getHeight() / $imageSize->getHeight()
+        );
+        
+        // サムネイル画像作るために元画像をメモリに展開すると、メモリオーバーになってしまう
+        // なので、メモリには展開せずに自身をそのまま使う
+//        \Cake\Log\Log::debug("thumbnail Created Handle=" . (microtime(true) - $startTime));
+        $thumbnail = $this;
+//        \Cake\Log\Log::debug("thumbnail new Image=" . (microtime(true) - $startTime));
 
+        $thumbnail->usePalette($this->palette());
+        $thumbnail->strip();
+        // if target width is larger than image width
+        // AND target height is longer than image height
+        if ($size->contains($imageSize)) {
+            @unlink($dstFile);
+            return $thumbnail;
+        }
+
+        if ($mode === ImageInterface::THUMBNAIL_INSET) {
+            $ratio = min($ratios);
+        } else {
+            $ratio = max($ratios);
+        }
+
+        if ($mode === ImageInterface::THUMBNAIL_OUTBOUND) {
+            if (!$imageSize->contains($size)) {
+                $size = new Box(
+                    min($imageSize->getWidth(), $size->getWidth()),
+                    min($imageSize->getHeight(), $size->getHeight())
+                );
+            } else {
+                $imageSize = $thumbnail->getSize()->scale($ratio);
+                $thumbnail->resize($imageSize, $filter);
+            }
+            $thumbnail->crop(new Point(
+                max(0, round(($imageSize->getWidth() - $size->getWidth()) / 2)),
+                max(0, round(($imageSize->getHeight() - $size->getHeight()) / 2))
+            ), $size);
+        } else {
+            if (!$imageSize->contains($size)) {
+                $imageSize = $imageSize->scale($ratio);
+                $thumbnail->resize($imageSize, $filter);
+            } else {
+                $imageSize = $thumbnail->getSize()->scale($ratio);
+                $thumbnail->resize($imageSize, $filter);
+            }
+        }
+
+//        \Cake\Log\Log::debug("after =" . memory_get_usage() / (1024 * 1024)."MB");
+        @unlink($dstFile);
+//        \Cake\Log\Log::debug("thumbnail end=" . (microtime(true) - $startTime));
+        return $thumbnail;
+    }
     /**
      * Updates a given array of save options for backward compatibility with legacy names
      *
